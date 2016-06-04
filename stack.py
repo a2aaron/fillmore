@@ -27,14 +27,16 @@ class Instr(object):
 prefixes = {
     'quiet': 'quiet',
     '#': 'quiet',
-    '♯': 'quiet'
+    '♯': 'quiet',
+    'cond': 'cond',
+    '?': 'cond'
 }
 
 
 sigil_to_op = {
     '←': 'push', '→': 'pop',
     '↔': 'swap',
-    '↑': 'jump',
+    '↑': 'jump', '?': 'cond',
     '+': 'add',
     '-': 'sub', '−': 'sub',  # A minus isn't the same thing as a hyphen!
     '*': 'mul', '×': 'mul',
@@ -46,7 +48,7 @@ sigil_to_op = {
     '>': 'gt',
     '<=': 'le', '≤': 'le',
     '>=': 'ge', '≥': 'ge',
-    '∅': 'nop',
+    '∅': 'nop'
 }
 
 valid_ops = [
@@ -54,7 +56,7 @@ valid_ops = [
     'add', 'sub', 'mul', 'div', 'pow',
     'eq', 'lt', 'gt', 'le', 'ge',
     'not',
-    'to', 'jump',
+    'to', 'jump', 
     'nop'
 ]
 
@@ -66,6 +68,7 @@ arg_types = {
     'eq': [[]], 'lt': [[]], 'gt': [[]], 'le': [[]], 'ge': [[]],
     'not': [[]],
     'nop': [[]],
+    'cond': [[]],
 }
 
 
@@ -187,6 +190,10 @@ def eval_program(program):
     while current_instr < len(instructions):
         instr = instructions[current_instr]
         current_instr += 1
+
+        if 'cond' in instr.prefix and stack.pop() == 0:
+            continue
+
         if instr.op == 'push':
             stack.append(instr.args[0])
         elif instr.op == 'pop':

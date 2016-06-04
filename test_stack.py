@@ -228,6 +228,36 @@ def test_jump_labels():
 
     # Multiple jump labels should work.
 
+
+def test_cond():
+    # cond is a prefix that only allows the next instruction
+    # to execute if the top stack value is not zero.
+    # By default, it pops the top value.
+    assert eval_program('push 1; cond push 2') == [2]
+    assert eval_program('push 0; cond push 2') == []
+
+    # Floats and negatives do trigger the conditional
+    assert eval_program('push 1; push 2; div; cond push 2') == [2]
+    assert eval_program('push 0; push 2; div; cond push 2') == []
+    assert eval_program('push -1; cond push 2') == [2]
+    # Since cond pops the stack, it's an error to pop an empty stack
+    with pytest.raises(IndexError):
+        eval_program('cond push 2')
+    with pytest.raises(ValueError):
+        eval_program('cond')
+
+    # It's not an error to TRY to conditionally execute
+    # even if the stack is too small, but it is an error
+    # if that instruction does actually execute.
+    assert eval_program('push 0; cond add') == []
+    with pytest.raises(IndexError):
+        eval_program('push 1; cond add')
+
+    # "quiet cond op" will execute the op quietly.
+    # It is identical to "cond quiet op"
+    assert eval_program('push 1; push 2; push 100; quiet cond add')  == [1, 2, 3]
+    assert eval_program('push 3; push 2; cond quiet not')  == [3, 0]
+
 @pytest.mark.timeout(1)
 def test_fibonacci():
     # Has the nth fibonacci term at the top of the stack
@@ -298,6 +328,7 @@ def test_bad_labels():
     # Multiple jumps to the same label are fine however.
     code = '@label; push 2; jump @label; jump @label'
     list(parse_program(code))
+
 
 def test_label_with_instruction():
     # Labels before an instruction are an error.
