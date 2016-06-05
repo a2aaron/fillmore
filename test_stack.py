@@ -330,6 +330,16 @@ def test_bad_labels():
     list(parse_program(code))
 
 
+def test_bad_prefixes():
+    # A prefix without an instruction is an error.
+    with pytest.raises(ValueError):
+       list(parse_program('quiet'))
+    with pytest.raises(ValueError):
+       list(parse_program('cond'))
+    # Duplicated prefixes are not allowed.
+    with pytest.raises(ValueError):
+        list(parse_program('quiet quiet push 1'))
+
 def test_label_with_instruction():
     # Labels before an instruction are an error.
     with pytest.raises(ValueError):

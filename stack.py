@@ -110,7 +110,8 @@ def parse_program(code):
             # Check for two labels in instruction.
             if label and is_label(part):
                 raise ValueError("Two labels on instruction {}".format(line))
-
+            if part in prefix:
+                raise ValueError("Two prefixes on instruction {}".format(prefix))
             if part in valid_ops:
                 op = part
             elif part in sigil_to_op:
@@ -123,7 +124,7 @@ def parse_program(code):
                 args.append(float(part))
             except ValueError:
                 pass
-
+        
         # Undefined label.
         if label not in label_indexes and label is not None:
             raise ValueError("The label, {}, was not defined".format(label))
@@ -133,6 +134,10 @@ def parse_program(code):
         # Not an instruction or missing label
         if op is None and label is None:
             raise ValueError("Syntax Error: {}".format(line))
+        # Prefix without instruction.
+        if op is None and prefix is not None:
+            raise ValueError("The instruction, {}, has no op.".format(line))
+
         # Handle jump @label.
         if op == 'jump' and label:
             op = 'to'
@@ -160,7 +165,6 @@ def parse_program(code):
 
 def is_label(label):
     return label[0] == '@'
-
 
 def get_label_indexes(split_program):
     label_indexes = {}
@@ -286,6 +290,3 @@ binary_ops = {
 unary_ops = {
     'not': lambda a: float(not a)
 }
-
-
-print(eval_program("push 1; push 2; add; push 5; mul; push 3; div"))
