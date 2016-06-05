@@ -28,15 +28,20 @@ prefixes = {
     'quiet': 'quiet',
     '#': 'quiet',
     '♯': 'quiet',
+
     'cond': 'cond',
-    '?': 'cond'
+    '?': 'cond',
+
+    'qcond': 'qcond',
+    '??': 'qcond', '⁇': 'qucond', # Second one is U+2047 (DOUBLE QUESTION MARK)
+    '¿': 'qcond',
 }
 
 
 sigil_to_op = {
     '←': 'push', '→': 'pop',
     '↔': 'swap',
-    '↑': 'jump', '?': 'cond',
+    '↑': 'jump',
     '+': 'add',
     '-': 'sub', '−': 'sub',  # A minus isn't the same thing as a hyphen!
     '*': 'mul', '×': 'mul',
@@ -48,7 +53,7 @@ sigil_to_op = {
     '>': 'gt',
     '<=': 'le', '≤': 'le',
     '>=': 'ge', '≥': 'ge',
-    '∅': 'nop'
+    '∅': 'nop',
 }
 
 valid_ops = [
@@ -57,7 +62,7 @@ valid_ops = [
     'eq', 'lt', 'gt', 'le', 'ge',
     'not',
     'to', 'jump', 
-    'nop'
+    'nop',
 ]
 
 arg_types = {
@@ -68,7 +73,6 @@ arg_types = {
     'eq': [[]], 'lt': [[]], 'gt': [[]], 'le': [[]], 'ge': [[]],
     'not': [[]],
     'nop': [[]],
-    'cond': [[]],
 }
 
 
@@ -124,7 +128,6 @@ def parse_program(code):
                 args.append(float(part))
             except ValueError:
                 pass
-        
         # Undefined label.
         if label not in label_indexes and label is not None:
             raise ValueError("The label, {}, was not defined".format(label))
@@ -137,7 +140,9 @@ def parse_program(code):
         # Prefix without instruction.
         if op is None and prefix is not None:
             raise ValueError("The instruction, {}, has no op.".format(line))
-
+        # Use of cond and qcond prefixes on the same instuction
+        if 'cond' in prefix and 'qcond' in prefix:
+            raise ValueError("Cannot use cond and qcond prefixes in the same instruction.")
         # Handle jump @label.
         if op == 'jump' and label:
             op = 'to'
@@ -195,8 +200,18 @@ def eval_program(program):
         instr = instructions[current_instr]
         current_instr += 1
 
-        if 'cond' in instr.prefix and stack.pop() == 0:
-            continue
+        if 'cond' in instr.prefix:
+            # I think this can be placed in the outer if, but I don't
+            # know it that causes the top value to always get poped
+            if stack.pop() == 0:
+                continue
+        
+        elif 'qcond' in instr.prefix:
+            if stack[-1] == 0:
+                continue
+            else:
+                # Fake pop the top value, will be readded later.
+                qcond_value = stack.pop()
 
         if instr.op == 'push':
             stack.append(instr.args[0])
@@ -264,6 +279,9 @@ def eval_program(program):
             pass
         else:
             raise ValueError('Unknown instruction {}'.format(instr))
+
+        if 'qcond' in instr.prefix:
+            stack.append(qcond_value)
     return stack
 
 

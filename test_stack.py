@@ -232,7 +232,7 @@ def test_jump_labels():
 def test_cond():
     # cond is a prefix that only allows the next instruction
     # to execute if the top stack value is not zero.
-    # By default, it pops the top value.
+    # It pops the top value even if the condition isn't met.
     assert eval_program('push 1; cond push 2') == [2]
     assert eval_program('push 0; cond push 2') == []
 
@@ -257,6 +257,22 @@ def test_cond():
     # It is identical to "cond quiet op"
     assert eval_program('push 1; push 2; push 100; quiet cond add')  == [1, 2, 3]
     assert eval_program('push 3; push 2; cond quiet not')  == [3, 0]
+
+def test_qcond():
+    # Similar to cond, qcond will execute the next instruction
+    # if the top stack on the value is not zero.
+    # However it does not pop the top value.
+    # Effectively, qcond "fake pops" the top value
+    # then does the instruction, and finially repushes the inital value.
+    assert eval_program('push 1; push 2; push 3; qcond push 4') == [1, 2, 4, 3]
+    assert eval_program('push 1; push 2; push 0; qcond push 4') == [1, 2, 0]
+    # You can also use it with the quiet prefix
+    # Note that the operation will use the items below the top element
+    assert eval_program('push 10; push 20; push 1; ?? *') == [200, 1]
+    assert eval_program('push 10; push 20; push 1; ?? # add') == [10, 20, 30, 1]
+    # Note that you can't use cond and qcond in the same instruction.
+    with pytest.raises(ValueError):
+        list(parse_program('cond qcond add'))
 
 @pytest.mark.timeout(1)
 def test_fibonacci():
