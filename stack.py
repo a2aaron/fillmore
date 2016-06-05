@@ -61,7 +61,7 @@ valid_ops = [
     'add', 'sub', 'mul', 'div', 'pow',
     'eq', 'lt', 'gt', 'le', 'ge',
     'not',
-    'to', 'jump', 
+    'to', 'jump',
     'nop',
 ]
 
@@ -105,17 +105,15 @@ def parse_program(code):
         if not parts or is_label(parts[0]):
             continue
         
+        if not is_well_formed(parts):
+            raise ValueError("Syntax Error: {}".format(line))
+
         # Process the instruction
         op = None
         args = []
         prefix = []
         label = None
         for part in parts:
-            # Check for two labels in instruction.
-            if label and is_label(part):
-                raise ValueError("Two labels on instruction {}".format(line))
-            if part in prefix:
-                raise ValueError("Two prefixes on instruction {}".format(prefix))
             if part in valid_ops:
                 op = part
             elif part in sigil_to_op:
@@ -134,12 +132,6 @@ def parse_program(code):
         # Not a naked label or not an op which supports labels
         if op not in ['jump', 'to', None] and label:
             raise ValueError("Cannot use label with {}".format(op))
-        # Not an instruction or missing label
-        if op is None and label is None:
-            raise ValueError("Syntax Error: {}".format(line))
-        # Prefix without instruction.
-        if op is None and prefix is not None:
-            raise ValueError("The instruction, {}, has no op.".format(line))
         # Use of cond and qcond prefixes on the same instuction
         if 'cond' in prefix and 'qcond' in prefix:
             raise ValueError("Cannot use cond and qcond prefixes in the same instruction.")
@@ -168,8 +160,89 @@ def parse_program(code):
         yield Instr(op, args, prefix)
 
 
+def is_well_formed(parts):
+    r"""
+    Take an instruction split into a list of parts and check if it is well formed
+    Does not typecheck the instructions, only that they make syntaxtical sense
+    It also doesn't care if a particular combination of prefixes and op aren't valid,
+    so it will pass 'add @label' even though that doesn't actually work
+
+    >> is_well_formed(['@label'])
+    True
+
+    >> is_well_formed(['@label', 'add'])
+    False
+
+    >> is_well_formed(['jump', 'quiet'])
+    False
+    """
+    # Check if valid naked label
+    if is_label(parts[0]):
+        if len(parts) == 1:
+            return True
+        else:
+            return False
+
+    # Since it isn't a naked label, the first part must be a prefix or an op
+    if not (parts[0] in prefixes or is_op(parts[0])):
+        return False
+
+    # No op or more then one op is invalid.
+    if sum(is_op(part) for part in parts) != 1:
+        return False
+
+    # Find the positions of the parts.
+    for i, part in enumerate(parts):
+        if part in prefixes:
+            prefix_i = i
+        elif is_label(part):
+            label_i = i
+        elif is_op(part):
+            op_i = i
+        else:
+            continue
+
+    if has_prefix(parts):
+        # Prefix must come before op
+        prefix_validity = prefix_i < op_i
+
+        # Duplicated prefixes
+        prefix = [part for part in parts if part in prefixes]
+        if len(prefix) != len(set(prefix)):
+            return False
+    else:
+        prefix_validity = True
+
+    if has_label(parts):
+        # Label must come after op
+        label_validity = label_i > op_i
+
+        # Must have exactly one label
+        if sum(is_label(part) for part in parts) != 1:
+            return False
+    else:
+        label_validity = True
+
+
+
+    return prefix_validity and label_validity
+
+
 def is_label(label):
     return label[0] == '@'
+
+def has_label(parts):
+    return any(is_label(part) for part in parts)
+
+def has_prefix(parts):
+    return any(part in prefixes for part in parts)
+
+def is_op(part):
+    return part in valid_ops or part in sigil_to_op
+
+def has_op(parts):
+    return any(is_op(part) for part in parts)
+
 
 def get_label_indexes(split_program):
     label_indexes = {}
@@ -210,7 +283,7 @@ def eval_program(program):
             if stack[-1] == 0:
                 continue
             else:
-                # Fake pop the top value, will be readded later.
+                # Fake pop the top value. It will be repushed at the end.
                 qcond_value = stack.pop()
 
         if instr.op == 'push':

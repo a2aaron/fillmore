@@ -35,10 +35,41 @@ def test_parse_invalid():
     programs = ['quiet ad 6', 
                 'pop push',
                 'push 1 add',
-                '1']
+                '1',
+                'not real'
+                'invalid add'
+                ]
     for program in programs:
         with pytest.raises(ValueError):    
             next(parse_program(program))
+
+
+def test_is_well_formed():
+    valid_cases = ['@label',
+                   'add',
+                   'jump @label',
+                   'add @label',
+                   'quiet not',
+                   'cond quiet not',
+                   'cond quiet jump @label',
+                   'cond qcond jump']
+    for case in valid_cases:
+        case = case.strip().split()
+        assert stack.is_well_formed(case) == True
+
+    invalid_cases = ['@label jump',
+                     'jump quiet',
+                     'this should not work',
+                     'cond add quiet',
+                     'quiet quiet add',
+                     'quiet cond',
+                     '@label @label',
+                     'sub add',
+                     'bad add'
+                     'eq bad']
+    for case in invalid_cases:
+        case = case.strip().split()
+        assert stack.is_well_formed(case) == False
 
 
 def test_argument_errors():
@@ -355,6 +386,8 @@ def test_bad_prefixes():
     # Duplicated prefixes are not allowed.
     with pytest.raises(ValueError):
         list(parse_program('quiet quiet push 1'))
+    # The prefix must come before the instruction.
+        list(parse_program('not cond'))
 
 def test_label_with_instruction():
     # Labels before an instruction are an error.
