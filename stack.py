@@ -25,16 +25,10 @@ class Instr(object):
 
 
 prefixes = {
-    'quiet': 'quiet',
-    '#': 'quiet',
-    '♯': 'quiet',
-
-    'cond': 'cond',
-    '?': 'cond',
-
-    'qcond': 'qcond',
-    '??': 'qcond', '⁇': 'qucond', # Second one is U+2047 (DOUBLE QUESTION MARK)
-    '¿': 'qcond',
+    'quiet': 'quiet', '#': 'quiet', '♯': 'quiet',
+    'cond': 'cond', '?': 'cond',
+    # Last is U+2047 (DOUBLE QUESTION MARK)
+    'qcond': 'qcond', '??': 'qcond', '¿': 'qcond', '⁇': 'qucond',
 }
 
 
@@ -68,7 +62,8 @@ valid_ops = [
 arg_types = {
     'push': [[float]],
     'pop': [[]],
-    'dup': [[], [int]], 'swap': [[], [int]], 'jump': [[], [int]], 'to': [[], [int]],
+    'dup': [[], [int]], 'swap': [[], [int]],
+    'jump': [[], [int]], 'to': [[], [int]],
     'add': [[]], 'sub': [[]], 'mul': [[]], 'div': [[]], 'pow': [[]],
     'eq': [[]], 'lt': [[]], 'gt': [[]], 'le': [[]], 'ge': [[]],
     'not': [[]],
@@ -77,8 +72,8 @@ arg_types = {
 
 
 def parse_program(code):
-    r"""
-    Take a source code string and yield a sequence of instructions
+    """
+    Take a source code string and yield a sequence of instructions.
 
     >> list(parse_program('push 1'))
     [Instr('push', [1.0])]
@@ -90,8 +85,8 @@ def parse_program(code):
     >> list(parse_program('↔'))
     [Instr('swap')]
 
-    Prefixes are placed before the instruction
-    Some prefixes also have sigils
+    Prefixes are placed before the instruction. Some prefixes also have
+    sigils.
     >>> list(parse_program('♯ +'))
     [Instr('add', [], ['quiet'])]
     """
@@ -99,14 +94,16 @@ def parse_program(code):
     label_indexes = get_label_indexes(split_program);
     # Represents ONLY instruction indexes
     # Used to map labels and index numbers.
+
+    # TODO: Get rid of this
+    def is_op(part):
+        return part in valid_ops or part in sigil_to_op
+
     for line in split_program:
         parts = line.strip().split()
         # Ignore newlines 
         if not parts or is_label(parts[0]):
             continue
-        
-        if not is_well_formed(parts):
-            raise ValueError("Syntax Error: {}".format(line))
 
         # Process the instruction
         op = None
@@ -114,18 +111,34 @@ def parse_program(code):
         prefix = []
         label = None
         for part in parts:
-            if part in valid_ops:
-                op = part
-            elif part in sigil_to_op:
-                op = sigil_to_op[part]
+            if is_op(part):
+                if op:
+                    raise ValueError("The ops, {} and {}, were found on "
+                                     "the same line".format(part, op))
+                if part in valid_ops:
+                    op = part
+                elif part in sigil_to_op:
+                    op = sigil_to_op[part]
             elif part in prefixes:
+                if op:
+                    raise ValueError("The prefix {} appears after the op "
+                        "{}".format(part, op))
+                if part in prefix:
+                    raise ValueError("The prefix {} was found twice on one "
+                                     "line".format(part))
                 prefix.append(prefixes[part])
             elif is_label(part):
+                if label:
+                    raise ValueError("The labels, {} and {}, were found on "
+                                    "the same line".format(part, label))
                 label = part
-            try:
-                args.append(float(part))
-            except ValueError:
-                pass
+            else:
+                try:
+                    args.append(float(part))
+                except ValueError:
+                    raise ValueError("{} is not a valid float".format(part))
+        if not op and not label:
+            raise ValueError("No op or label found!")
         # Undefined label.
         if label not in label_indexes and label is not None:
             raise ValueError("The label, {}, was not defined".format(label))
@@ -134,7 +147,8 @@ def parse_program(code):
             raise ValueError("Cannot use label with {}".format(op))
         # Use of cond and qcond prefixes on the same instuction
         if 'cond' in prefix and 'qcond' in prefix:
-            raise ValueError("Cannot use cond and qcond prefixes in the same instruction.")
+            raise ValueError("Cannot use cond and qcond prefixes in the "
+                             "same instruction.")
         # Handle jump @label.
         if op == 'jump' and label:
             op = 'to'
@@ -160,88 +174,8 @@ def parse_program(code):
         yield Instr(op, args, prefix)
 
 
-def is_well_formed(parts):
-    r"""
-    Take an instruction split into a list of parts and check if it is well formed
-    Does not typecheck the instructions, only that they make syntaxtical sense
-    It also doesn't care if a particular combination of prefixes and op aren't valid,
-    so it will pass 'add @label' even though that doesn't actually work
-
-    >> is_well_formed(['@label'])
-    True
-
-    >> is_well_formed(['@label', 'add'])
-    False
-
-    >> is_well_formed(['jump', 'quiet'])
-    False
-    """
-    # Check if valid naked label
-    if is_label(parts[0]):
-        if len(parts) == 1:
-            return True
-        else:
-            return False
-
-    # Since it isn't a naked label, the first part must be a prefix or an op
-    if not (parts[0] in prefixes or is_op(parts[0])):
-        return False
-
-    # No op or more then one op is invalid.
-    if sum(is_op(part) for part in parts) != 1:
-        return False
-
-    # Find the positions of the parts.
-    for i, part in enumerate(parts):
-        if part in prefixes:
-            prefix_i = i
-        elif is_label(part):
-            label_i = i
-        elif is_op(part):
-            op_i = i
-        else:
-            continue
-
-    if has_prefix(parts):
-        # Prefix must come before op
-        prefix_validity = prefix_i < op_i
-
-        # Duplicated prefixes
-        prefix = [part for part in parts if part in prefixes]
-        if len(prefix) != len(set(prefix)):
-            return False
-    else:
-        prefix_validity = True
-
-    if has_label(parts):
-        # Label must come after op
-        label_validity = label_i > op_i
-
-        # Must have exactly one label
-        if sum(is_label(part) for part in parts) != 1:
-            return False
-    else:
-        label_validity = True
-
-
-
-    return prefix_validity and label_validity
-
-
 def is_label(label):
     return label[0] == '@'
-
-def has_label(parts):
-    return any(is_label(part) for part in parts)
-
-def has_prefix(parts):
-    return any(part in prefixes for part in parts)
-
-def is_op(part):
-    return part in valid_ops or part in sigil_to_op
-
-def has_op(parts):
-    return any(is_op(part) for part in parts)
 
 
 def get_label_indexes(split_program):
@@ -257,7 +191,8 @@ def get_label_indexes(split_program):
                 .format(parts[0], label_indexes[parts[0]], current_index))
         if is_label(parts[0]):
             if len(parts) != 1:
-                raise ValueError("{} has a label before an instruction.".format(line))
+                raise ValueError("{} has a label before an instruction."
+                                 .format(line))
             else:
                 label_indexes[parts[0]] = current_index
                 continue
@@ -313,8 +248,8 @@ def eval_program(program):
             if dup_depth == 0:
                 continue
             if dup_depth > len(stack):
-                raise IndexError("Cannot dup {} elements, stack has {}".format(
-                    dup_depth, len(stack)))
+                raise IndexError("Cannot dup {} elements, stack has {}"
+                                 .format(dup_depth, len(stack)))
             stack.extend(stack[-dup_depth:])
         elif instr.op in unary_ops:
             if 'quiet' in instr.prefix:
@@ -347,7 +282,7 @@ def eval_program(program):
             current_instr = int(jump_to)
             if current_instr >= len(instructions) or current_instr <= 0:
                 raise IndexError("Jump address {} out of bounds ({})".format(
-                    current_instr, len(instructions)-1))
+                                 current_instr, len(instructions)-1))
         elif instr.op == 'nop':
             pass
         else:

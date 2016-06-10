@@ -31,45 +31,41 @@ def test_parse_quiet():
         assert list(parse_program(quiet + ' jump')) == expected
 
 
-def test_parse_invalid():
-    programs = ['quiet ad 6', 
-                'pop push',
-                'push 1 add',
-                '1',
-                'not real'
-                'invalid add'
-                ]
-    for program in programs:
-        with pytest.raises(ValueError):    
-            next(parse_program(program))
-
-
 def test_is_well_formed():
-    valid_cases = ['@label',
-                   'add',
-                   'jump @label',
-                   'add @label',
-                   'quiet not',
-                   'cond quiet not',
-                   'cond quiet jump @label',
-                   'cond qcond jump']
+    valid_cases = [
+        '@label',
+        'add',
+        '@label; jump @label',
+        'quiet not',
+        'cond quiet not',
+        '@label; cond quiet jump @label',
+    ]
     for case in valid_cases:
-        case = case.strip().split()
-        assert stack.is_well_formed(case) == True
+        case = case.strip()
+        list(parse_program(case))
 
-    invalid_cases = ['@label jump',
-                     'jump quiet',
-                     'this should not work',
-                     'cond add quiet',
-                     'quiet quiet add',
-                     'quiet cond',
-                     '@label @label',
-                     'sub add',
-                     'bad add'
-                     'eq bad']
+    invalid_cases = [
+        '@label jump',
+        'jump quiet',
+        'this should not work',
+        'cond add quiet',
+        'quiet quiet add',
+        'quiet cond',
+        '@label @label',
+        'sub add',
+        'bad add',
+        'eq bad',
+        'quiet ad 6', 
+        'pop push',
+        'push 1 add',
+        '1',
+        'not real',
+        'invalid add'
+    ]
     for case in invalid_cases:
-        case = case.strip().split()
-        assert stack.is_well_formed(case) == False
+        case = case.strip()
+        with pytest.raises(ValueError):
+            list(parse_program(case))
 
 
 def test_argument_errors():
