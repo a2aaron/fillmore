@@ -25,9 +25,10 @@ class Instr(object):
 
 
 prefixes = {
-    'quiet': 'quiet',
-    '#': 'quiet',
-    '♯': 'quiet'
+    'quiet': 'quiet', '#': 'quiet', '♯': 'quiet',
+    'cond': 'cond', '?': 'cond',
+    # Last is U+2047 (DOUBLE QUESTION MARK)
+    'qcond': 'qcond', '??': 'qcond', '¿': 'qcond', '⁇': 'qucond',
 }
 
 
@@ -55,13 +56,14 @@ valid_ops = [
     'eq', 'lt', 'gt', 'le', 'ge',
     'not',
     'to', 'jump',
-    'nop'
+    'nop',
 ]
 
 arg_types = {
     'push': [[float]],
     'pop': [[]],
-    'dup': [[], [int]], 'swap': [[], [int]], 'jump': [[], [int]], 'to': [[], [int]],
+    'dup': [[], [int]], 'swap': [[], [int]],
+    'jump': [[], [int]], 'to': [[], [int]],
     'add': [[]], 'sub': [[]], 'mul': [[]], 'div': [[]], 'pow': [[]],
     'eq': [[]], 'lt': [[]], 'gt': [[]], 'le': [[]], 'ge': [[]],
     'not': [[]],
@@ -70,8 +72,8 @@ arg_types = {
 
 
 def parse_program(code):
-    r"""
-    Take a source code string and yield a sequence of instructions
+    """
+    Take a source code string and yield a sequence of instructions.
 
     >> list(parse_program('push 1'))
     [Instr('push', [1.0])]
@@ -83,8 +85,8 @@ def parse_program(code):
     >> list(parse_program('↔'))
     [Instr('swap')]
 
-    Prefixes are placed before the instruction
-    Some prefixes also have sigils
+    Prefixes are placed before the instruction. Some prefixes also have
+    sigils.
     >>> list(parse_program('♯ +'))
     [Instr('add', [], ['quiet'])]
     """
@@ -92,44 +94,61 @@ def parse_program(code):
     label_indexes = get_label_indexes(split_program);
     # Represents ONLY instruction indexes
     # Used to map labels and index numbers.
+
+    # TODO: Get rid of this
+    def is_op(part):
+        return part in valid_ops or part in sigil_to_op
+
     for line in split_program:
         parts = line.strip().split()
         # Ignore newlines 
         if not parts or is_label(parts[0]):
             continue
-        
+
         # Process the instruction
         op = None
         args = []
         prefix = []
         label = None
         for part in parts:
-            # Check for two labels in instruction.
-            if label and is_label(part):
-                raise ValueError("Two labels on instruction {}".format(line))
-
-            if part in valid_ops:
-                op = part
-            elif part in sigil_to_op:
-                op = sigil_to_op[part]
+            if is_op(part):
+                if op:
+                    raise ValueError("The ops, {} and {}, were found on "
+                                     "the same line".format(part, op))
+                if part in valid_ops:
+                    op = part
+                elif part in sigil_to_op:
+                    op = sigil_to_op[part]
             elif part in prefixes:
+                if op:
+                    raise ValueError("The prefix {} appears after the op "
+                        "{}".format(part, op))
+                if part in prefix:
+                    raise ValueError("The prefix {} was found twice on one "
+                                     "line".format(part))
                 prefix.append(prefixes[part])
             elif is_label(part):
+                if label:
+                    raise ValueError("The labels, {} and {}, were found on "
+                                    "the same line".format(part, label))
                 label = part
-            try:
-                args.append(float(part))
-            except ValueError:
-                pass
-
+            else:
+                try:
+                    args.append(float(part))
+                except ValueError:
+                    raise ValueError("{} is not a valid float".format(part))
+        if not op and not label:
+            raise ValueError("No op or label found!")
         # Undefined label.
         if label not in label_indexes and label is not None:
             raise ValueError("The label, {}, was not defined".format(label))
         # Not a naked label or not an op which supports labels
         if op not in ['jump', 'to', None] and label:
             raise ValueError("Cannot use label with {}".format(op))
-        # Not an instruction or missing label
-        if op is None and label is None:
-            raise ValueError("Syntax Error: {}".format(line))
+        # Use of cond and qcond prefixes on the same instuction
+        if 'cond' in prefix and 'qcond' in prefix:
+            raise ValueError("Cannot use cond and qcond prefixes in the "
+                             "same instruction.")
         # Handle jump @label.
         if op == 'jump' and label:
             op = 'to'
@@ -172,7 +191,8 @@ def get_label_indexes(split_program):
                 .format(parts[0], label_indexes[parts[0]], current_index))
         if is_label(parts[0]):
             if len(parts) != 1:
-                raise ValueError("{} has a label before an instruction.".format(line))
+                raise ValueError("{} has a label before an instruction."
+                                 .format(line))
             else:
                 label_indexes[parts[0]] = current_index
                 continue
@@ -187,6 +207,20 @@ def eval_program(program):
     while current_instr < len(instructions):
         instr = instructions[current_instr]
         current_instr += 1
+
+        if 'cond' in instr.prefix:
+            # I think this can be placed in the outer if, but I don't
+            # know it that causes the top value to always get poped
+            if stack.pop() == 0:
+                continue
+        
+        elif 'qcond' in instr.prefix:
+            if stack[-1] == 0:
+                continue
+            else:
+                # Fake pop the top value. It will be repushed at the end.
+                qcond_value = stack.pop()
+
         if instr.op == 'push':
             stack.append(instr.args[0])
         elif instr.op == 'pop':
@@ -214,8 +248,8 @@ def eval_program(program):
             if dup_depth == 0:
                 continue
             if dup_depth > len(stack):
-                raise IndexError("Cannot dup {} elements, stack has {}".format(
-                    dup_depth, len(stack)))
+                raise IndexError("Cannot dup {} elements, stack has {}"
+                                 .format(dup_depth, len(stack)))
             stack.extend(stack[-dup_depth:])
         elif instr.op in unary_ops:
             if 'quiet' in instr.prefix:
@@ -248,11 +282,14 @@ def eval_program(program):
             current_instr = int(jump_to)
             if current_instr >= len(instructions) or current_instr <= 0:
                 raise IndexError("Jump address {} out of bounds ({})".format(
-                    current_instr, len(instructions)-1))
+                                 current_instr, len(instructions)-1))
         elif instr.op == 'nop':
             pass
         else:
             raise ValueError('Unknown instruction {}'.format(instr))
+
+        if 'qcond' in instr.prefix:
+            stack.append(qcond_value)
     return stack
 
 
@@ -279,6 +316,3 @@ binary_ops = {
 unary_ops = {
     'not': lambda a: float(not a)
 }
-
-
-print(eval_program("push 1; push 2; add; push 5; mul; push 3; div"))

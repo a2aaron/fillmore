@@ -31,14 +31,41 @@ def test_parse_quiet():
         assert list(parse_program(quiet + ' jump')) == expected
 
 
-def test_parse_invalid():
-    programs = ['quiet ad 6', 
-                'pop push',
-                'push 1 add',
-                '1']
-    for program in programs:
-        with pytest.raises(ValueError):    
-            next(parse_program(program))
+def test_is_well_formed():
+    valid_cases = [
+        '@label',
+        'add',
+        '@label; jump @label',
+        'quiet not',
+        'cond quiet not',
+        '@label; cond quiet jump @label',
+    ]
+    for case in valid_cases:
+        case = case.strip()
+        list(parse_program(case))
+
+    invalid_cases = [
+        '@label jump',
+        'jump quiet',
+        'this should not work',
+        'cond add quiet',
+        'quiet quiet add',
+        'quiet cond',
+        '@label @label',
+        'sub add',
+        'bad add',
+        'eq bad',
+        'quiet ad 6', 
+        'pop push',
+        'push 1 add',
+        '1',
+        'not real',
+        'invalid add'
+    ]
+    for case in invalid_cases:
+        case = case.strip()
+        with pytest.raises(ValueError):
+            list(parse_program(case))
 
 
 def test_argument_errors():
@@ -228,6 +255,52 @@ def test_jump_labels():
 
     # Multiple jump labels should work.
 
+
+def test_cond():
+    # cond is a prefix that only allows the next instruction
+    # to execute if the top stack value is not zero.
+    # It pops the top value even if the condition isn't met.
+    assert eval_program('push 1; cond push 2') == [2]
+    assert eval_program('push 0; cond push 2') == []
+
+    # Floats and negatives do trigger the conditional
+    assert eval_program('push 1; push 2; div; cond push 2') == [2]
+    assert eval_program('push 0; push 2; div; cond push 2') == []
+    assert eval_program('push -1; cond push 2') == [2]
+    # Since cond pops the stack, it's an error to pop an empty stack
+    with pytest.raises(IndexError):
+        eval_program('cond push 2')
+    with pytest.raises(ValueError):
+        eval_program('cond')
+
+    # It's not an error to TRY to conditionally execute
+    # even if the stack is too small, but it is an error
+    # if that instruction does actually execute.
+    assert eval_program('push 0; cond add') == []
+    with pytest.raises(IndexError):
+        eval_program('push 1; cond add')
+
+    # "quiet cond op" will execute the op quietly.
+    # It is identical to "cond quiet op"
+    assert eval_program('push 1; push 2; push 100; quiet cond add')  == [1, 2, 3]
+    assert eval_program('push 3; push 2; cond quiet not')  == [3, 0]
+
+def test_qcond():
+    # Similar to cond, qcond will execute the next instruction
+    # if the top stack on the value is not zero.
+    # However it does not pop the top value.
+    # Effectively, qcond "fake pops" the top value
+    # then does the instruction, and finially repushes the inital value.
+    assert eval_program('push 1; push 2; push 3; qcond push 4') == [1, 2, 4, 3]
+    assert eval_program('push 1; push 2; push 0; qcond push 4') == [1, 2, 0]
+    # You can also use it with the quiet prefix
+    # Note that the operation will use the items below the top element
+    assert eval_program('push 10; push 20; push 1; ?? *') == [200, 1]
+    assert eval_program('push 10; push 20; push 1; ?? # add') == [10, 20, 30, 1]
+    # Note that you can't use cond and qcond in the same instruction.
+    with pytest.raises(ValueError):
+        list(parse_program('cond qcond add'))
+
 @pytest.mark.timeout(1)
 def test_fibonacci():
     # Has the nth fibonacci term at the top of the stack
@@ -298,6 +371,19 @@ def test_bad_labels():
     # Multiple jumps to the same label are fine however.
     code = '@label; push 2; jump @label; jump @label'
     list(parse_program(code))
+
+
+def test_bad_prefixes():
+    # A prefix without an instruction is an error.
+    with pytest.raises(ValueError):
+       list(parse_program('quiet'))
+    with pytest.raises(ValueError):
+       list(parse_program('cond'))
+    # Duplicated prefixes are not allowed.
+    with pytest.raises(ValueError):
+        list(parse_program('quiet quiet push 1'))
+    # The prefix must come before the instruction.
+        list(parse_program('not cond'))
 
 def test_label_with_instruction():
     # Labels before an instruction are an error.
