@@ -42,6 +42,11 @@ sigil_to_op = {
     '/': 'div', '÷': 'div',
     '^': 'pow',
     '!': 'not', '¬': 'not',
+    '&': 'and', '∧': 'and',
+    # Last is U+2227 (LOGICAL AND)
+    '|': 'or', '∨': 'or',
+    # Last is U+2228 (LOGICAL OR)
+    '⊕': 'xor', # This is U+2295 (LOGICAL XOR)
     '=': 'eq',
     '<': 'lt',
     '>': 'gt',
@@ -54,6 +59,7 @@ valid_ops = [
     'push', 'pop', 'dup', 'swap', 'jump',
     'add', 'sub', 'mul', 'div', 'pow',
     'eq', 'lt', 'gt', 'le', 'ge',
+    'and', 'or', 'xor',
     'not',
     'to', 'jump',
     'nop',
@@ -66,6 +72,7 @@ arg_types = {
     'jump': [[], [int]], 'to': [[], [int]],
     'add': [[]], 'sub': [[]], 'mul': [[]], 'div': [[]], 'pow': [[]],
     'eq': [[]], 'lt': [[]], 'gt': [[]], 'le': [[]], 'ge': [[]],
+    'and': [[]], 'or': [[]], 'xor': [[]],
     'not': [[]],
     'nop': [[]],
 }
@@ -309,7 +316,10 @@ binary_ops = {
     'gt': lambda a, b: float(b > a),
     'ge': lambda a, b: float(b >= a),
     'lt': lambda a, b: float(b < a),
-    'le': lambda a, b: float(b <= a)
+    'le': lambda a, b: float(b <= a),
+    'and': lambda a, b: float(a and b),
+    'or': lambda a, b: float(a or b),
+    'xor': lambda a, b: float(bool(a) != bool(b)),
 }
 
 

@@ -405,3 +405,18 @@ def test_nop():
     assert eval_program('nop') == []
     assert eval_program('∅') == []
 
+
+def test_logical_operators():
+    inputs = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    and_expected = [0, 0, 0, 1]
+    or_expected = [0, 1, 1, 1]
+    xor_expected = [0, 1, 1, 0]
+    for (a, b), expected in zip(inputs, and_expected):
+        code = 'push {}; push {}; and'.format(a, b)
+        assert eval_program(code) == [expected]
+    for (a, b), expected in zip(inputs, or_expected):
+        code = 'push {}; push {}; or'.format(a, b)
+        assert eval_program(code) == [expected]
+    for (a, b), expected in zip(inputs, xor_expected):
+        code = 'push {}; push {}; xor'.format(a, b)
+        assert eval_program(code) == [expected]
